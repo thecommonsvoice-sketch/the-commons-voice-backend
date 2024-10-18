@@ -1,8 +1,16 @@
 import express from "express"
+import db from "./data/dbs.js";
 import userRoute from "./routers/user.js"
+
+// connecting database
+db();
 
 const app = express();
 
+// to use req.body
+app.use(express.json())
+
+//  user routes
 app.use("/user",userRoute);
 
 
