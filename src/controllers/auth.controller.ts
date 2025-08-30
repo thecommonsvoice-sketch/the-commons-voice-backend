@@ -1,0 +1,199 @@
+// src/controllers/auth.controller.ts
+import { RequestHandler } from "express";
+import bcrypt from "bcrypt";
+import { z } from "zod";
+import { prisma } from "../../prisma/client.js";
+import {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  getCookieOptions,
+} from "../config/authCookies.js";
+import {
+  signAccessToken,
+  signRefreshToken,
+  verifyToken,
+  genJti,
+  Role,
+} from "../utils/tokens.js";
+
+const registerSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+const loginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+async function issueTokensAndCookies(
+  res: any, // Ideally: express.Response
+  userId: string,
+  role: Role,
+  oldJti?: string
+) {
+  if (oldJti) {
+    await prisma.refreshToken.updateMany({
+      where: { jti: oldJti, userId, revoked: false },
+      data: { revoked: true },
+    });
+  }
+
+  const jti = genJti();
+  const access = signAccessToken({ userId, role });
+  const refresh = signRefreshToken({ userId, tokenType: "refresh", jti });
+
+  await prisma.refreshToken.create({
+    data: {
+      jti,
+      userId,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+  });
+
+  const base = getCookieOptions();
+
+  res.cookie(ACCESS_TOKEN_COOKIE, access, { ...base, expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)  }); 
+  res.cookie(REFRESH_TOKEN_COOKIE, refresh, base); // default 7 days from base
+}
+
+
+export const register: RequestHandler = async (req, res) => {
+  const parsed = registerSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      message: "Validation failed",
+      errors: parsed.error.flatten(),
+    });
+    return;
+  }
+
+  const { name, email, password } = parsed.data;
+
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser) {
+    res.status(400).json({ message: "Email already exists" });
+    return;
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const user = await prisma.user.create({
+    data: { name, email, password: hashedPassword },
+    select: { id: true, name: true, email: true, role: true },
+  });
+
+    await issueTokensAndCookies(res, user.id, user.role as Role);
+  res.status(201).json({
+    message: "Registration successful",
+    user,
+  });
+};
+
+
+
+
+export const login: RequestHandler = async (req, res) => {
+  const parsed = loginSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      message: "Validation failed",
+      errors: parsed.error.flatten(),
+    });
+    return;
+  }
+
+  const { email, password } = parsed.data;
+
+  // Find user including password (to compare)
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, name: true, email: true, password: true, role: true }
+  });
+
+  if (!user) {
+    res.status(400).json({ message: "Invalid credentials" });
+    return;
+  }
+
+  // Compare password
+  const isMatch = await bcrypt.compare(password, user.password);
+  if (!isMatch) {
+    res.status(400).json({ message: "Invalid credentials" });
+    return;
+  }
+
+  // Issue tokens & cookies immediately
+  await issueTokensAndCookies(res, user.id, user.role as Role);
+
+  // Exclude password from response
+  const { password: _, ...safeUser } = user;
+
+   res.json({
+    message: "Login successful",
+    user: safeUser,
+  });
+};
+
+
+
+// POST /auth/refresh — verify, check DB, rotate
+export const refresh: RequestHandler = async (req, res) => {
+  const refreshToken = req.cookies?.[REFRESH_TOKEN_COOKIE];
+  if (!refreshToken) {
+    res.status(401).json({ message: "No refresh token" });
+    return;
+  }
+
+  try {
+    const payload = verifyToken<{ userId: string; tokenType: "refresh"; jti: string }>(refreshToken);
+    if (payload.tokenType !== "refresh") {
+      res.status(401).json({ message: "Invalid refresh token" });
+      return;
+    }
+
+    // Check DB status
+    const record = await prisma.refreshToken.findUnique({ where: { jti: payload.jti } });
+    if (!record || record.revoked || record.userId !== payload.userId || record.expiresAt < new Date()) {
+      res.status(401).json({ message: "Refresh token revoked/expired" });
+      return;
+    }
+
+    // Rotate: revoke old, issue new pair
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { id: true, role: true },
+    });
+    if (!user) {
+      res.status(401).json({ message: "User not found" });
+      return;
+    }
+
+    await issueTokensAndCookies(res, user.id, user.role as Role, payload.jti);
+    res.json({ message: "Refreshed" });
+  } catch {
+    res.status(401).json({ message: "Invalid or expired refresh token" });
+  }
+};
+
+// POST /auth/logout — revoke current refresh (if present) and clear cookies
+export const logout: RequestHandler = async (req, res) => {
+  const refreshToken = req.cookies?.[REFRESH_TOKEN_COOKIE];
+  if (refreshToken) {
+    try {
+      const payload = verifyToken<{ userId: string; tokenType: "refresh"; jti: string }>(refreshToken);
+      await prisma.refreshToken.updateMany({
+        where: { jti: payload.jti, userId: payload.userId, revoked: false },
+        data: { revoked: true },
+      });
+    } catch {
+      // ignore malformed/expired token on logout
+    }
+  }
+
+  const base = getCookieOptions();
+  res.clearCookie(ACCESS_TOKEN_COOKIE, base);
+  res.clearCookie(REFRESH_TOKEN_COOKIE, base);
+  res.json({ message: "Logged out" });
+};

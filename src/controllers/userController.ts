@@ -1,36 +1,29 @@
-import { NextFunction,Request,Response } from "express";
-import User, { IUser } from "../models/userModel.js";
+import { Request, Response } from "express";
+import { prisma } from "../../prisma/client.js";
 
-export const getUsers =  async(req:Request, res:Response,next:NextFunction)=>{
+export const getProfile = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId; // Comes from auth middleware (if any)
 
-    // const users:string[] = ['a','c','d'
-    // ];
+    // If no user (visitor), return guest response
+    if (!userId) {
+      res.status(200).json({ user: null }); // ← Key change: allow guests
+      return;
+    }
 
-    let users:IUser[] = await User.find({});
-    console.log(users)
-
-
-    res.json({
-        success:true,
-        users
-    })
-
-}
-
-
-export const createUser = async(req:Request, res:Response,next:NextFunction)=>{
-
-    // const {name,email} = req.body;
-    const { name,email } = req.body
-
-    await User.create({
-        name,
-        email
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true, role: true, createdAt: true },
     });
 
-     res.json({
-        success:true,
-        message:'User created successfully'
-    })
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
 
-}
+    res.json({ user });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};

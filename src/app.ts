@@ -1,37 +1,48 @@
-import express from "express"
-import db from "./data/dbs.js";
-import userRoute from "./routers/user.js"
-import { config } from "dotenv";
-import {dirname} from "path";
-import { fileURLToPath } from 'url';
+import express, { Request, Response } from "express";
+import helmet from "helmet";
+import cors from "cors";
+import morgan from "morgan";
+import cookieParser from "cookie-parser";
+import compression from "compression";
+import rateLimit from "express-rate-limit";
+import authRoutes from "./routes/auth.routes.js";
+import articleRoutes from "./routes/article.routes.js";
+import categoryRoutes from "./routes/category.routes.js";
+import adminRoutes from "./routes/adminRoutes.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename)
-
-
-config({
-    path: `${__dirname}/data/config.env`,
-    
-})
-
-
-// connecting database
-db();
 
 const app = express();
 
-// to use req.body
-app.use(express.json())
+// Security & middleware
+app.use(helmet());
+app.use(
+  cors({
+    origin: "http://localhost:3000", // your frontend URL
+    credentials: true, // <-- THIS IS CRUCIAL
+  })
+);
 
-//  user routes
-app.use("/user",userRoute);
+app.use(morgan("dev"));
+app.use(express.json());
+app.use(cookieParser());
+app.use(compression());
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+  })
+);
+
+// routes
+app.use("/api/auth", authRoutes);
+app.use("/api/articles", articleRoutes);
+app.use("/api/categories", categoryRoutes);
+app.use("/api/admin", adminRoutes);
 
 
-app.get("/",(req,res)=>{
+// Health check route with explicit types
+app.get("/health", (_req: Request, res: Response) => {
+  res.json({ status: "ok" });
+});
 
-    res.send("<head><style>h1{color:red;}</style></head><h1>lol bhai jaan</h1>");
-
-})
-app.listen(process.env.PORT,()=>{
-    console.log("Server is running on port:",process.env.PORT);
-})
+export default app;
