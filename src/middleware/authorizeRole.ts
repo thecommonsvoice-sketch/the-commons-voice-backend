@@ -1,35 +1,37 @@
 import { Request, Response, NextFunction } from "express";
-import { verifyToken } from "../utils/tokens.js";
-import { ACCESS_TOKEN_COOKIE } from "../config/authCookies.js";
-
-export interface DecodedToken {
-  userId: string;
-  role: string;
-  iat: number;
-  exp: number;
-}
+import { prisma } from "../../prisma/client.js";
 
 export const authorizeRole = (allowedRoles: string[]) => {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    const token = req.cookies?.[ACCESS_TOKEN_COOKIE];
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const user = req.user;
 
-    if (!token) {
-      res.status(401).json({ message: "No token provided" });
+    if (!user) {
+      res.status(401).json({ message: "Unauthorized: User not authenticated" });
       return;
     }
 
     try {
-      const decoded = verifyToken<DecodedToken>(token);
+      // Fetch the user's role from the database to ensure it's up-to-date
+      const dbUser = await prisma.user.findUnique({
+        where: { id: user.userId },
+        select: { role: true },
+      });
 
-      if (!allowedRoles.includes(decoded.role)) {
+      const role = dbUser?.role || user.role;
+
+      if (!allowedRoles.includes(role)) {
         res.status(403).json({ message: "Access denied: insufficient permissions" });
         return;
       }
 
-      (req as any).user = { userId: decoded.userId, role: decoded.role };
+      // Attach the updated role to req.user
+        req.user={userId:user.userId,role}
+      
+
       next();
-    } catch (err) {
-      res.status(401).json({ message: "Invalid or expired token" });
+    } catch (error) {
+      console.error("Authorization error:", error);
+      res.status(500).json({ message: "Error verifying user role" });
     }
   };
 };

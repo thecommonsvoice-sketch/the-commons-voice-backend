@@ -55,15 +55,15 @@ export const createArticle = async (
 ): Promise<void> => {
   const parsed = articleSchema.safeParse(req.body);
   if (!parsed.success) {
-    res
+     res
       .status(400)
       .json({ message: "Validation failed", errors: parsed.error.flatten() });
-    return;
+      return
   }
 
   if (!req.user) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
+     res.status(401).json({ message: "Unauthorized" });
+     return;
   }
 
   try {
@@ -91,12 +91,23 @@ export const createArticle = async (
       },
     });
 
-    res.status(201).json({ message: "Article created successfully", article });
+     res.status(201).json({
+      message: "Article created successfully",
+      article,
+    }); // ✅ return here
+    return;
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Failed to create article", error });
+
+    if (!res.headersSent) {
+       res
+        .status(500)
+        .json({ message: "Failed to create article", error });
+        return;
+    }
   }
 };
+
 
 // Get All Articles (Public + Authenticated)
 export const getArticles = async (req: Request, res: Response): Promise<void> => {
@@ -108,12 +119,15 @@ export const getArticles = async (req: Request, res: Response): Promise<void> =>
       category,
       author,
       authorId, // New authorId parameter
+      // userId,
       status,
       startDate,
       endDate,
     } = req.query;
 
     const isGuest = !req.user || req.user.role === "USER";
+
+    console.log("is guest:", isGuest);
 
     // Get current date without time (just date comparison)
     const currentDate = new Date();
@@ -131,7 +145,7 @@ export const getArticles = async (req: Request, res: Response): Promise<void> =>
         OR: [
           { title: { contains: String(search), mode: "insensitive" } }, // Match title
           { content: { contains: String(search), mode: "insensitive" } }, // Match content
-          { tags: { has: String(search) } }, // Match tags (assuming tags is an array)
+          // { tags: { has: String(search) } }, // Match tags (assuming tags is an array)
           { category: { name: { contains: String(search), mode: "insensitive" } } }, // Match category name
           { author: { name: { contains: String(search), mode: "insensitive" } } }, // Match author name
           { metaTitle: { contains: String(search), mode: "insensitive" } }, // Match meta title
@@ -195,6 +209,27 @@ export const getArticles = async (req: Request, res: Response): Promise<void> =>
       prisma.article.count({ where }),
     ]);
 
+    // // is bookmarked
+    // if (userId) {
+    //   let id = userId as string;
+    //   const articleIds = articles.map((article) => article.id);
+    //   const bookmarks = await prisma.bookmark.findMany({
+    //     where: {
+    //       id,
+    //       articleId: { in: articleIds },
+    //     },
+    //     select: { articleId: true },
+    //   });
+    //   const bookmarkedArticleIds = new Set(
+    //     bookmarks.map((bookmark) => bookmark.articleId)
+    //   );
+    //   articles.forEach((article) => {
+    //     (article as any).isBookmarked = bookmarkedArticleIds.has(article.id);
+    //   }
+    //   );
+    //   console.log("Bookmarked Article IDs:", Array.from(articles));
+    // }
+
     // Send response with updated count
     res.json({
       data: articles,
@@ -236,6 +271,8 @@ export const getArticleBySlugOrId = async (
         category: { select: { id: true, name: true, slug: true } },
       },
     });
+
+    // const {user} = req.params;
 
     const isGuest = !req.user || req.user.role === "USER";
 
@@ -428,7 +465,6 @@ export const autoPurgeDeletedArticles = async (): Promise<void> => {
       where: { deletedAt: { lt: cutoffDate } },
     });
 
-    console.log(`Auto-purged ${deleted.count} articles older than ${DAYS_BEFORE_PURGE} days.`);
   } catch (error) {
     console.error("Failed to auto-purge deleted articles:", error);
   }
@@ -469,5 +505,51 @@ export const updateArticleStatus = async (
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Failed to update status", error });
+  }
+};
+
+// Get Article with Role Check
+export const getArticleWithRoleCheck = async (req: Request, res: Response): Promise<void> => {
+  const { slugOrId } = req.params;
+
+
+  try {
+
+    // Determine the query condition based on the user's role
+    let where: any = {};
+
+
+    
+      where = {
+        AND: [
+          {
+            OR: [
+              { id: slugOrId }, // Match by ID
+              { slug: slugOrId }, // Match by slug
+            ],
+          },
+        ],
+      }
+
+    // Fetch the article from the database
+    const article = await prisma.article.findFirst({
+      where,
+      include: {
+        author: { select: { id: true, name: true, email: true } },
+        category: { select: { id: true, name: true, slug: true } },
+      },
+    });
+
+
+    if (!article) {
+      res.status(404).json({ message: "Article not found" });
+      return;
+    }
+
+    // Return the article
+    res.json({ article });
+  } catch (error) {
+    console.error("Check 13: Error occurred", error);
+    res.status(500).json({ message: "Failed to fetch article", error });
   }
 };

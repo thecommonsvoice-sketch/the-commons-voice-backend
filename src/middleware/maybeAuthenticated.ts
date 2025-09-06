@@ -21,6 +21,7 @@ export const maybeAuthenticate = (
   res: Response,
   next: NextFunction
 ): void => {
+
   const token = req.cookies?.[ACCESS_TOKEN_COOKIE];
 
   if (!token) {

@@ -54,10 +54,9 @@ async function issueTokensAndCookies(
 
   const base = getCookieOptions();
 
-  res.cookie(ACCESS_TOKEN_COOKIE, access, { ...base, expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)  }); 
-  res.cookie(REFRESH_TOKEN_COOKIE, refresh, base); // default 7 days from base
+  res.cookie(ACCESS_TOKEN_COOKIE, access, base); // Use maxAge from getCookieOptions
+  res.cookie(REFRESH_TOKEN_COOKIE, refresh, base); // Use maxAge from getCookieOptions
 }
-
 
 export const register: RequestHandler = async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
@@ -71,28 +70,42 @@ export const register: RequestHandler = async (req, res) => {
 
   const { name, email, password } = parsed.data;
 
-  const existingUser = await prisma.user.findUnique({ where: { email } });
-  if (existingUser) {
-    res.status(400).json({ message: "Email already exists" });
-    return;
-  }
+  try {
+    // Check if the email already exists
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      res.status(400).json({ message: "Email already exists" });
+      return;
+    }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-  const user = await prisma.user.create({
-    data: { name, email, password: hashedPassword },
-    select: { id: true, name: true, email: true, role: true },
-  });
+    // Create the user in the database
+    const user = await prisma.user.create({
+      data: { name, email, password: hashedPassword },
+      select: { id: true, name: true, email: true, role: true },
+    });
 
+    // Issue tokens and set cookies
     await issueTokensAndCookies(res, user.id, user.role as Role);
-  res.status(201).json({
-    message: "Registration successful",
-    user,
-  });
+
+    // Attach the user to req.user
+    req.user = {
+      userId: user.id,
+      role: user.role,
+    };
+
+    // Respond with the created user (excluding sensitive data)
+    res.status(201).json({
+      message: "Registration successful",
+      user,
+    });
+  } catch (error) {
+    console.error("Error during registration:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 };
-
-
-
 
 export const login: RequestHandler = async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
@@ -106,37 +119,47 @@ export const login: RequestHandler = async (req, res) => {
 
   const { email, password } = parsed.data;
 
-  // Find user including password (to compare)
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true, name: true, email: true, password: true, role: true }
-  });
+  try {
+    // Find user including password (to compare)
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, name: true, email: true, password: true, role: true },
+    });
 
-  if (!user) {
-    res.status(400).json({ message: "Invalid credentials" });
-    return;
+    if (!user) {
+      res.status(400).json({ message: "Invalid credentials" });
+      return;
+    }
+
+    // Compare password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      res.status(400).json({ message: "Invalid credentials" });
+      return;
+    }
+
+    // Issue tokens & cookies immediately
+    await issueTokensAndCookies(res, user.id, user.role as Role);
+
+    // Attach user to req.user
+    req.user = {
+      userId: user.id,
+      role: user.role,
+    };
+
+
+    // Exclude password from response
+    const { password: _, ...safeUser } = user;
+
+    res.json({
+      message: "Login successful",
+      user: safeUser,
+    });
+  } catch (error) {
+    console.error("Error during login:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
-
-  // Compare password
-  const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch) {
-    res.status(400).json({ message: "Invalid credentials" });
-    return;
-  }
-
-  // Issue tokens & cookies immediately
-  await issueTokensAndCookies(res, user.id, user.role as Role);
-
-  // Exclude password from response
-  const { password: _, ...safeUser } = user;
-
-   res.json({
-    message: "Login successful",
-    user: safeUser,
-  });
 };
-
-
 
 // POST /auth/refresh — verify, check DB, rotate
 export const refresh: RequestHandler = async (req, res) => {
@@ -171,8 +194,16 @@ export const refresh: RequestHandler = async (req, res) => {
     }
 
     await issueTokensAndCookies(res, user.id, user.role as Role, payload.jti);
+
+    // Attach user to req.user
+    req.user = {
+      userId: user.id,
+      role: user.role,
+    };
+
     res.json({ message: "Refreshed" });
-  } catch {
+  } catch (error) {
+    console.error("Error during token refresh:", error);
     res.status(401).json({ message: "Invalid or expired refresh token" });
   }
 };
@@ -187,13 +218,14 @@ export const logout: RequestHandler = async (req, res) => {
         where: { jti: payload.jti, userId: payload.userId, revoked: false },
         data: { revoked: true },
       });
-    } catch {
-      // ignore malformed/expired token on logout
+    } catch (error) {
+      console.error("Error during logout:", error);
+      // Ignore malformed/expired token on logout
     }
   }
 
   const base = getCookieOptions();
   res.clearCookie(ACCESS_TOKEN_COOKIE, base);
   res.clearCookie(REFRESH_TOKEN_COOKIE, base);
-  res.json({ message: "Logged out" });
+  res.json({ message: "Logged out successfully" });
 };

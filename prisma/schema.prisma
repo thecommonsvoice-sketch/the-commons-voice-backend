@@ -13,11 +13,13 @@ model User {
   password      String
   name          String?
   role          Role           @default(USER)
-  isActive      Boolean        @default(true)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
-  refreshTokens RefreshToken[]
+  isActive      Boolean        @default(true)
   articles      Article[]
+  refreshTokens RefreshToken[]
+  comments      Comment[]      // Relation to comments
+  bookmarks     Bookmark[]     // Relation to bookmarks
 }
 
 model RefreshToken {
@@ -28,8 +30,7 @@ model RefreshToken {
   expiresAt DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -39,29 +40,58 @@ model Article {
   title           String
   slug            String        @unique
   content         String
-  excerpt         String?
-  metaTitle       String?
-  metaDescription String?
   coverImage      String?
-  ogImage         String?
   categoryId      String
   authorId        String
-  status          ArticleStatus @default(DRAFT)
-  deletedAt       DateTime?     // <-- Added soft delete field
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+  status          ArticleStatus @default(DRAFT)
+  excerpt         String?
+  metaDescription String?
+  metaTitle       String?
+  ogImage         String?
+  tags            String[]      @default([])
+  deletedAt       DateTime?
+  author          User          @relation(fields: [authorId], references: [id])
+  category        Category      @relation(fields: [categoryId], references: [id])
+  comments        Comment[]     // Relation to comments
+  bookmarks       Bookmark[]    // Relation to bookmarks
+}
 
-  author   User     @relation(fields: [authorId], references: [id])
-  category Category @relation(fields: [categoryId], references: [id])
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  userId    String
+  articleId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([articleId])
+}
+
+model Bookmark {
+  id        String   @id @default(cuid())
+  userId    String
+  articleId String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, articleId]) // Ensure a user can bookmark an article only once
+  @@index([userId])
+  @@index([articleId])
 }
 
 model Category {
   id          String    @id @default(cuid())
   name        String    @unique
   slug        String    @unique
+  createdAt   DateTime  @default(now())
   description String?
   isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   articles    Article[]
 }

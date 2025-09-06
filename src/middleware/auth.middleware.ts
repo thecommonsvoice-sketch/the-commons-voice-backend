@@ -16,11 +16,12 @@ declare module "express-serve-static-core" {
   }
 }
 
-export const authenticate = (
+export const authenticate = async (
   req: Request,
   res: Response,
   next: NextFunction
-): void => {
+): Promise<void> => {
+
   const token = req.cookies?.[ACCESS_TOKEN_COOKIE];
 
   if (!token) {
@@ -30,9 +31,12 @@ export const authenticate = (
 
   try {
     const decoded = verifyToken<JwtPayload>(token);
+
+    // Attach user details to req.user
     req.user = { userId: decoded.userId, role: decoded.role };
     next();
   } catch (error) {
+    console.error("Authentication error:", error);
     res.status(401).json({ message: "Invalid or expired token" });
   }
 };

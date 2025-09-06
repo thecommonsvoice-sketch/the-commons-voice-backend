@@ -262,3 +262,34 @@ export const deleteArticleByAdmin = async (req: Request, res: Response): Promise
     res.status(500).json({ message: "Failed to delete article" });
   }
 };
+
+// Regex for CUID (starts with 'c' and is 25 characters long, adjust if needed)
+const CUID_REGEX = /^c[a-z0-9]{24}$/;
+
+export const getArticleBySlugOrId = async (req: Request, res: Response): Promise<void> => {
+  const { slugOrId } = req.params;
+
+  try {
+    const where = CUID_REGEX.test(slugOrId)
+      ? { id: slugOrId } // If it's a valid CUID, search by ID
+      : { slug: slugOrId }; // Otherwise, search by slug
+
+    const article = await prisma.article.findUnique({
+      where,
+      include: {
+        author: { select: { id: true, name: true, email: true } },
+        category: { select: { id: true, name: true, slug: true } },
+      },
+    });
+
+    if (!article) {
+      res.status(404).json({ message: "Article not found" });
+      return;
+    }
+
+    res.json({ article });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to fetch article" });
+  }
+};

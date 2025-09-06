@@ -78,6 +78,7 @@ export const createCategory = async (req: Request, res: Response): Promise<void>
 
 // GET ALL CATEGORIES (public)
 export const getCategories = async (_req: Request, res: Response): Promise<void> => {
+
   try {
     const categories = await prisma.category.findMany({
       where: { isActive: true },

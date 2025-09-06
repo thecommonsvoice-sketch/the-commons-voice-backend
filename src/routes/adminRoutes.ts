@@ -8,7 +8,8 @@ import {
   adminGetAllArticles,
   changeArticleStatus,
   deleteArticleByAdmin,
-  createUser
+  createUser,
+  getArticleBySlugOrId
 } from "../controllers/adminController.js";
 
 const router = Router();
@@ -23,6 +24,7 @@ router.patch("/users/:userId/role", updateUserRole);
 router.patch("/users/:userId/toggle", toggleUserActiveStatus);
 
 // Article Management
+router.get("/articles/:slugOrId", getArticleBySlugOrId);
 router.get("/articles", adminGetAllArticles);
 router.patch("/articles/:articleId/status", changeArticleStatus);
 router.delete("/articles/:articleId", deleteArticleByAdmin);

@@ -1,22 +1,24 @@
+
 import { Router } from "express";
 import {
   createArticle,
   getArticles,
   getArticleBySlugOrId,
+  getArticleWithRoleCheck, // Import the new handler
   updateArticle,
-  deleteArticle, // use this instead
+  deleteArticle,
   restoreArticle,
   updateArticleStatus,
 } from "../controllers/articleController.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorizeRole } from "../middleware/authorizeRole.js";
+import { checkUser } from "middleware/checkUser.js";
 
 const router = Router();
 
 // Create article (EDITOR, REPORTER, ADMIN)
 router.post(
   "/",
-  authenticate,
   authorizeRole(["EDITOR", "REPORTER", "ADMIN"]),
   createArticle
 );
@@ -26,6 +28,12 @@ router.get("/", getArticles);
 
 // Get single article by slug or ID
 router.get("/:slugOrId", getArticleBySlugOrId);
+
+// Get article with role-based access control
+router.get(
+  "/role-check/:slugOrId",
+  getArticleWithRoleCheck // Use the new handler
+);
 
 // Update article (EDITOR, REPORTER (own only), ADMIN)
 router.put(

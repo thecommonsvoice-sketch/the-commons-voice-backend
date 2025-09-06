@@ -9,7 +9,7 @@ type AccessPayload = { userId: string; role: Role };
 type RefreshPayload = { userId: string; tokenType: "refresh"; jti: string };
 
 export const signAccessToken = (payload: AccessPayload) =>
-  jwt.sign(payload, config.jwtSecret, { expiresIn: "15m" });
+  jwt.sign(payload, config.jwtSecret, { expiresIn: "3d" });
 
 export const signRefreshToken = (payload: RefreshPayload) =>
   jwt.sign(payload, config.jwtSecret, { expiresIn: "7d" });
