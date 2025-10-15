@@ -1,4 +1,3 @@
-
 import { Router } from "express";
 import {
   createArticle,
@@ -12,13 +11,14 @@ import {
 } from "../controllers/articleController.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorizeRole } from "../middleware/authorizeRole.js";
-import { checkUser } from "middleware/checkUser.js";
+// import { checkUser } from "middleware/checkUser.js";
 
 const router = Router();
 
 // Create article (EDITOR, REPORTER, ADMIN)
 router.post(
   "/",
+  authenticate,
   authorizeRole(["EDITOR", "REPORTER", "ADMIN"]),
   createArticle
 );
@@ -32,13 +32,23 @@ router.get("/:slugOrId", getArticleBySlugOrId);
 // Get article with role-based access control
 router.get(
   "/role-check/:slugOrId",
-  getArticleWithRoleCheck // Use the new handler
+  authenticate, // Add authenticate middleware first
+  authorizeRole(["EDITOR", "REPORTER", "ADMIN"]),
+  getArticleWithRoleCheck
 );
 
 // Update article (EDITOR, REPORTER (own only), ADMIN)
 router.put(
   "/:slugOrId",
   authenticate,
+  authorizeRole(["EDITOR", "REPORTER", "ADMIN"]),
+  updateArticle
+);
+
+// Update article with role check
+router.put(
+  "/role-check/:slugOrId",
+  authenticate, // Add authenticate middleware first
   authorizeRole(["EDITOR", "REPORTER", "ADMIN"]),
   updateArticle
 );

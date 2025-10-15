@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { prisma } from "../../prisma/client.js";
 import { z } from "zod";
 import { ArticleStatus } from "@prisma/client";
+import { VideoData } from "types/article.js";
+// import { VideoData } from '../types/article';
 
 // Extend Express Request to include user
 declare global {
@@ -25,13 +27,19 @@ const articleSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters"),
   content: z.string().min(10, "Content must be at least 10 characters"),
   categoryId: z.string().optional(),
-  coverImage: z.string().url().optional(),
-  metaTitle: z.string().max(60).optional(),
-  metaDescription: z.string().max(160).optional(),
+  coverImage: z.string().url().optional().or(z.literal("")).or(z.null()),
+  metaTitle: z.string().max(60).optional().or(z.literal("")),
+  metaDescription: z.string().max(160).optional().or(z.literal("")),
   status: z.nativeEnum(ArticleStatus).optional(),
+  videos: z.array(z.object({
+    type: z.enum(['upload', 'embed']),
+    url: z.string().url(),
+    title: z.string().optional().or(z.literal("")),
+    description: z.string().optional().or(z.literal("")),
+  })).optional(),
 });
 
-const updateSchema = articleSchema.partial();
+// const updateSchema = articleSchema.partial();
 
 // Utility: generate unique slug
 const generateSlug = async (title: string, excludeId?: string) => {
@@ -52,18 +60,20 @@ const generateSlug = async (title: string, excludeId?: string) => {
 export const createArticle = async (
   req: Request,
   res: Response
-): Promise<void> => {
+): Promise<void> => {  console.log('Create article request body:', JSON.stringify(req.body, null, 2));
+  
   const parsed = articleSchema.safeParse(req.body);
   if (!parsed.success) {
-     res
+    console.error('Validation failed:', parsed.error.flatten());
+    res
       .status(400)
       .json({ message: "Validation failed", errors: parsed.error.flatten() });
-      return
+    return;
   }
 
   if (!req.user) {
-     res.status(401).json({ message: "Unauthorized" });
-     return;
+    res.status(401).json({ message: "Unauthorized" });
+    return;
   }
 
   try {
@@ -74,36 +84,64 @@ export const createArticle = async (
       coverImage,
       metaTitle,
       metaDescription,
+      videos
     } = parsed.data;
+    
+    console.log('Parsed data:', { title, content, categoryId, coverImage, metaTitle, metaDescription, videos });
+    
     const slug = await generateSlug(title);
+    console.log('Generated slug:', slug);
+
+    const articleData: any = {
+      title,
+      content,
+      slug,
+      categoryId: categoryId ?? "cmetuhypb0000jaappupxf6qx", // default fallback
+      coverImage: coverImage || null,
+      metaTitle: metaTitle || title.slice(0, 60),
+      metaDescription: metaDescription || content.slice(0, 160),
+      status: ArticleStatus.DRAFT,
+      authorId: req.user.userId,
+    };
+
+    // Only add videos if they exist
+    if (Array.isArray(videos) && videos.length > 0) {
+      articleData.videos = {
+        create: videos.map((video: VideoData) => ({
+          type: video.type,
+          url: video.url,
+          title: video.title || null,
+          description: video.description || null,
+        })),
+      };
+    }
+
+    console.log('Creating article with data:', JSON.stringify(articleData, null, 2));
 
     const article = await prisma.article.create({
-      data: {
-        title,
-        content,
-        slug,
-        categoryId: categoryId ?? "cmetuhypb0000jaappupxf6qx", // default fallback
-        coverImage,
-        metaTitle: metaTitle ?? title.slice(0, 60),
-        metaDescription: metaDescription ?? content.slice(0, 160),
-        status: ArticleStatus.DRAFT,
-        authorId: req.user.userId,
+      data: articleData,
+      include: {
+        author: { select: { id: true, name: true, email: true } },
+        category: { select: { id: true, name: true, slug: true } },
+        videos: true,
       },
     });
 
-     res.status(201).json({
+    console.log('Article created successfully:', article.id);
+
+    res.status(201).json({
       message: "Article created successfully",
       article,
-    }); // ✅ return here
+    });
     return;
   } catch (error) {
-    console.error(error);
+    console.error('Article creation error:', error);
 
     if (!res.headersSent) {
-       res
+      res
         .status(500)
-        .json({ message: "Failed to create article", error });
-        return;
+        .json({ message: "Failed to create article", error: error instanceof Error ? error.message : 'Unknown error' });
+      return;
     }
   }
 };
@@ -269,6 +307,7 @@ export const getArticleBySlugOrId = async (
       include: {
         author: { select: { id: true, name: true, email: true } },
         category: { select: { id: true, name: true, slug: true } },
+        videos: true,
       },
     });
 
@@ -297,70 +336,84 @@ export const updateArticle = async (
   req: Request,
   res: Response
 ): Promise<void> => {
-  const { slugOrId } = req.params;
-  const parsed = updateSchema.safeParse(req.body);
-
-  if (!parsed.success) {
-    res
-      .status(400)
-      .json({ message: "Validation failed", errors: parsed.error.flatten() });
-    return;
-  }
-
-  if (!req.user) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
-  }
-
-  const where = CUID_REGEX.test(slugOrId)
-    ? { id: slugOrId }
-    : { slug: slugOrId };
-
   try {
-    const article = await prisma.article.findUnique({ where });
-    if (!article) {
+    const { slugOrId } = req.params;
+    const { title, content, categoryId, coverImage, metaTitle, metaDescription, videos } = req.body;
+
+    console.log('Updating article with videos:', videos);
+
+    // Find the article
+    const existingArticle = await prisma.article.findFirst({
+      where: {
+        OR: [
+          { id: slugOrId },
+          { slug: slugOrId }
+        ]
+      },
+      include: {
+        videos: true,
+        author: true,
+        category: true
+      }
+    });
+
+    if (!existingArticle) {
       res.status(404).json({ message: "Article not found" });
       return;
     }
 
-    if (req.user.role === "REPORTER" && article.authorId !== req.user.userId) {
-      res
-        .status(403)
-        .json({ message: "You are not authorized to update this article" });
+    // Check authorization
+    if (!req.user) {
+      res.status(401).json({ message: "Unauthorized" });
       return;
     }
 
-    const {
-      title,
-      content,
-      categoryId,
-      coverImage,
-      metaTitle,
-      metaDescription,
-      status,
-    } = parsed.data;
-    const newSlug = title
-      ? await generateSlug(title, article.id)
-      : article.slug;
+    if (req.user.role === "REPORTER" && existingArticle.authorId !== req.user.userId) {
+      res.status(403).json({ message: "Not authorized to edit this article" });
+      return;
+    }
 
-    const updated = await prisma.article.update({
-      where,
+    // Handle video updates only when videos provided
+    if (Array.isArray(videos)) {
+      await prisma.articleVideo.deleteMany({
+        where: { articleId: existingArticle.id },
+      });
+    }
+
+    // Update article with new data including videos
+    const updatedArticle = await prisma.article.update({
+      where: { id: existingArticle.id },
       data: {
         title,
         content,
         categoryId,
         coverImage,
-        metaTitle: metaTitle ?? article.metaTitle,
-        metaDescription: metaDescription ?? article.metaDescription,
-        status,
-        slug: newSlug,
+        metaTitle,
+        metaDescription,
+        ...(Array.isArray(videos)
+          ? {
+              videos: {
+                create: videos.map((video: VideoData) => ({
+                  type: video.type,
+                  url: video.url,
+                  title: video.title,
+                  description: video.description,
+                })),
+              },
+            }
+          : {}),
       },
+      include: {
+        author: true,
+        category: true,
+        videos: true
+      }
     });
 
-    res.json({ message: "Article updated successfully", article: updated });
+    res.json({ article: updatedArticle });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Failed to update article", error });
+    console.error('Article update error:', error);
+    res.status(500).json({ message: "Failed to update article" });
   }
 };
 
@@ -512,24 +565,27 @@ export const updateArticleStatus = async (
 export const getArticleWithRoleCheck = async (req: Request, res: Response): Promise<void> => {
   const { slugOrId } = req.params;
 
+  // Check authentication
+  if (!req.user) {
+    res.status(401).json({ message: "Unauthorized: Authentication required" });
+    return;
+  }
+
+  // Deny access to regular users
+  if (req.user.role === "USER") {
+    res.status(403).json({ message: "Access denied: Insufficient permissions" });
+    return;
+  }
 
   try {
-
-    // Determine the query condition based on the user's role
-    let where: any = {};
-
-
-    
-      where = {
-        AND: [
-          {
-            OR: [
-              { id: slugOrId }, // Match by ID
-              { slug: slugOrId }, // Match by slug
-            ],
-          },
-        ],
-      }
+    // Determine the query condition based on slug or ID
+    const where: any = {
+      OR: [
+        { id: slugOrId }, // Match by ID
+        { slug: slugOrId }, // Match by slug
+      ],
+      deletedAt: null, // Exclude soft-deleted articles
+    };
 
     // Fetch the article from the database
     const article = await prisma.article.findFirst({
@@ -537,19 +593,52 @@ export const getArticleWithRoleCheck = async (req: Request, res: Response): Prom
       include: {
         author: { select: { id: true, name: true, email: true } },
         category: { select: { id: true, name: true, slug: true } },
+        videos: true,
       },
     });
-
 
     if (!article) {
       res.status(404).json({ message: "Article not found" });
       return;
     }
 
-    // Return the article
-    res.json({ article });
+    console.log('Fetched article for role check:', {
+      id: article.id,
+      slug: article.slug,
+      videosCount: article.videos?.length || 0,
+      videos: article.videos
+    });
+
+    // Role-based access control
+    const isAdmin = req.user.role === "ADMIN";
+    const isEditor = req.user.role === "EDITOR";
+    const isReporter = req.user.role === "REPORTER";
+    const isOwner = article.authorId === req.user.userId;
+
+    // ADMIN and EDITOR can view any article
+    if (isAdmin || isEditor) {
+      console.log('Returning article to ADMIN/EDITOR with videos:', article.videos?.length || 0);
+      res.json({ article });
+      return;
+    }
+
+    // REPORTER can only view their own articles
+    if (isReporter && isOwner) {
+      console.log('Returning article to REPORTER (owner) with videos:', article.videos?.length || 0);
+      res.json({ article });
+      return;
+    }
+
+    // REPORTER trying to access another reporter's article
+    if (isReporter && !isOwner) {
+      res.status(403).json({ message: "Access denied: You can only view your own articles" });
+      return;
+    }
+
+    // Fallback denial
+    res.status(403).json({ message: "Access denied: Insufficient permissions" });
   } catch (error) {
-    console.error("Check 13: Error occurred", error);
+    console.error("Article role check error:", error);
     res.status(500).json({ message: "Failed to fetch article", error });
   }
 };

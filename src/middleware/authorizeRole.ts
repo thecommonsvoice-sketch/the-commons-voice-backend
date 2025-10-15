@@ -1,12 +1,18 @@
 import { Request, Response, NextFunction } from "express";
 import { prisma } from "../../prisma/client.js";
+import { Role } from "@prisma/client";
 
-export const authorizeRole = (allowedRoles: string[]) => {
+export const authorizeRole = (allowedRoles: Array<Role | string>) => {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const user = req.user;
 
     if (!user) {
       res.status(401).json({ message: "Unauthorized: User not authenticated" });
+      return;
+    }
+
+    if (!user.userId) {
+      res.status(401).json({ message: "Unauthorized: invalid user payload" });
       return;
     }
 
@@ -17,21 +23,27 @@ export const authorizeRole = (allowedRoles: string[]) => {
         select: { role: true },
       });
 
-      const role = dbUser?.role || user.role;
+      if (!dbUser) {
+        res.status(401).json({ message: "Unauthorized: user not found" });
+        return;
+      }
 
-      if (!allowedRoles.includes(role)) {
+      const role = dbUser.role;
+
+      // Normalize roles and use a Set for efficient membership checks
+      const allowed = new Set(allowedRoles.map((r) => String(r).toUpperCase()));
+      if (!allowed.has(String(role).toUpperCase())) {
         res.status(403).json({ message: "Access denied: insufficient permissions" });
         return;
       }
 
-      // Attach the updated role to req.user
-        req.user={userId:user.userId,role}
-      
+      // Attach the updated role to req.user without dropping other fields
+      req.user = { ...user, role };
 
       next();
     } catch (error) {
       console.error("Authorization error:", error);
-      res.status(500).json({ message: "Error verifying user role" });
+      next(error as any);
     }
   };
 };
