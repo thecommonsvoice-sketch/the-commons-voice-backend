@@ -7,7 +7,7 @@
     "node": ">=14.20.1"
   },
   "scripts": {
-    "clean": "rimraf dist",
+    "clean": "rm -rf dist",
     "build": "npm run clean && tsc",
     "start": "node dist/server.js",
     "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts"
