@@ -3,16 +3,18 @@
   "version": "1.0.0",
   "main": "app.js",
   "type": "module",
+  "engines": {
+    "node": ">=14.20.1"
+  },
   "scripts": {
     "build": "rimraf dist && tsc",
-    "start": "NODE_ENV=production node dist/server.js",
+    "start": "node dist/server.js",
     "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts",
-    "type-check": "tsc --noEmit",
-    "prepare": "prisma generate"
+    "postinstall": "prisma generate"
   },
-"prisma": {
-  "seed": "node --loader ts-node/esm prisma/seed.ts"
-},
+  "prisma": {
+    "seed": "node --loader ts-node/esm prisma/seed.ts"
+  },
   "author": "",
   "license": "ISC",
   "dependencies": {
