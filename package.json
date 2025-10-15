@@ -8,10 +8,11 @@
   },
   "scripts": {
     "clean": "rimraf dist",
-    "build": "npm run clean && tsc",
+    "prebuild": "npm run clean",
+    "build": "tsc",
     "start": "node dist/server.js",
     "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts",
-    "postinstall": "prisma generate && npm run build"
+    "postinstall": "prisma generate"
   },
   "prisma": {
     "seed": "node --loader ts-node/esm prisma/seed.ts"
@@ -43,11 +44,12 @@
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
-    "@types/node": "^22.18.10",
+    "@types/node": "^20.0.0",
     "concurrently": "^9.0.1",
     "nodemon": "^3.1.7",
+    "rimraf": "^5.0.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
+    "typescript": "^5.0.0"
   }
 }
