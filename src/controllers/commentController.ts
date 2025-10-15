@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { prisma } from "../../prisma/client.js";
+import { prisma } from "../lib/prisma.js";
 
 // Add a comment to an article
 export const addComment = async (req: Request, res: Response): Promise<void> => {

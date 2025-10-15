@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Role, ArticleStatus } from "@prisma/client";
-import { prisma } from "../../prisma/client.js";
+import { prisma } from "../lib/prisma.js";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 

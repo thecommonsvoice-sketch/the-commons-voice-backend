@@ -2,7 +2,7 @@
 import type { RequestHandler, Response } from "express";
 import bcrypt from "bcrypt";
 import { z } from "zod";
-import { prisma } from "../../prisma/client.js";
+import { prisma } from "../lib/prisma.js";
 import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,

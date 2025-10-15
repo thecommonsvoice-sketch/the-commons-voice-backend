@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
-import { prisma } from "../../prisma/client.js";
+import { prisma } from "../lib/prisma.js";
 import { z } from "zod";
 import { ArticleStatus } from "@prisma/client";
-import { VideoData } from "types/article.js";
+import { VideoData } from "../types/article.js";
 // import { VideoData } from '../types/article';
 
 // Extend Express Request to include user
