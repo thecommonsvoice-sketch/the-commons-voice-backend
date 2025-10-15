@@ -4,7 +4,7 @@
   "main": "dist/server.js",
   "type": "module",
   "engines": {
-    "node": ">=14.20.1"
+    "node": ">=20.0.0"
   },
   "scripts": {
     "clean": "rm -rf dist",
@@ -39,14 +39,12 @@
     "@types/compression": "^1.8.1",
     "@types/cookie-parser": "^1.4.9",
     "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.3",
+    "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
-    "@types/node": "^20.0.0",
-    "@types/rimraf": "3.0.2",
+    "@types/node": "^20.14.0",
     "concurrently": "^9.0.1",
     "nodemon": "^3.1.7",
-    "rimraf": "5.0.10",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.5",
     "typescript": "^5.0.0"
