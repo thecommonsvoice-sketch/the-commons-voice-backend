@@ -8,11 +8,9 @@
   },
   "scripts": {
     "clean": "rimraf dist",
-    "prebuild": "npm run clean",
-    "build": "tsc",
+    "build": "npm run clean && tsc",
     "start": "node dist/server.js",
-    "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts",
-    "postinstall": "prisma generate"
+    "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts"
   },
   "prisma": {
     "seed": "node --loader ts-node/esm prisma/seed.ts"
