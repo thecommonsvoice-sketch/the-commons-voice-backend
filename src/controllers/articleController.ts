@@ -92,7 +92,18 @@ export const createArticle = async (
     const slug = await generateSlug(title);
     console.log('Generated slug:', slug);
 
-    const articleData: any = {
+    const articleData: {
+      title: string;
+      content: string;
+      slug: string;
+      categoryId: string;
+      coverImage: string | null;
+      metaTitle: string;
+      metaDescription: string;
+      status: ArticleStatus;
+      authorId: string;
+      videos?: { create: Array<{ type: "upload" | "embed"; url: string; title?: string | null; description?: string | null }> };
+    } = {
       title,
       content,
       slug,
@@ -108,7 +119,7 @@ export const createArticle = async (
     if (Array.isArray(videos) && videos.length > 0) {
       articleData.videos = {
         create: videos.map((video: VideoData) => ({
-          type: video.type,
+          type: video.type as "upload" | "embed",
           url: video.url,
           title: video.title || null,
           description: video.description || null,
@@ -172,10 +183,27 @@ export const getArticles = async (req: Request, res: Response): Promise<void> =>
     currentDate.setHours(0, 0, 0, 0); // Set to midnight to ignore the time part
 
     // Build the `where` condition dynamically
-    const where: any = {
+    type WhereClause = {
+      deletedAt: null;
+      status?: ArticleStatus;
+      category?: { name: { contains: string; mode: "insensitive" } };
+      author?: { name: { contains: string; mode: "insensitive" } };
+      authorId?: string;
+      createdAt?: { gte: Date; lte: Date };
+      OR?: Array<{
+        title?: { contains: string; mode: "insensitive" };
+        content?: { contains: string; mode: "insensitive" };
+        category?: { name: { contains: string; mode: "insensitive" } };
+        author?: { name: { contains: string; mode: "insensitive" } };
+        metaTitle?: { contains: string; mode: "insensitive" };
+        metaDescription?: { contains: string; mode: "insensitive" };
+      }>;
+    };
+    
+    const where: WhereClause = {
       deletedAt: null, // Exclude soft-deleted articles
       ...(isGuest && !authorId && { status: ArticleStatus.PUBLISHED }), // Only published for guests unless authorId is provided
-      ...(status && { status }), // Filter by status
+      ...(status && typeof status === 'string' && Object.values(ArticleStatus).includes(status as ArticleStatus) && { status: status as ArticleStatus }), // Filter by status
       ...(category && { category: { name: { contains: String(category), mode: "insensitive" } } }), // Filter by category
       ...(author && { author: { name: { contains: String(author), mode: "insensitive" } } }), // Filter by author name
       ...(authorId && { authorId: String(authorId) }), // Filter by authorId (includes all statuses)
@@ -579,7 +607,12 @@ export const getArticleWithRoleCheck = async (req: Request, res: Response): Prom
 
   try {
     // Determine the query condition based on slug or ID
-    const where: any = {
+    type ArticleWhereClause = {
+      OR: Array<{ slug: string } | { id: string }>;
+      deletedAt: null;
+    };
+    
+    const where: ArticleWhereClause = {
       OR: [
         { id: slugOrId }, // Match by ID
         { slug: slugOrId }, // Match by slug

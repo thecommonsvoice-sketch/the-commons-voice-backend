@@ -1,5 +1,5 @@
 // src/controllers/auth.controller.ts
-import { RequestHandler } from "express";
+import type { RequestHandler, Response } from "express";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import { prisma } from "../../prisma/client.js";
@@ -28,7 +28,7 @@ const loginSchema = z.object({
 });
 
 async function issueTokensAndCookies(
-  res: any, // Ideally: express.Response
+  res: Response,
   userId: string,
   role: Role,
   oldJti?: string
@@ -93,6 +93,7 @@ export const register: RequestHandler = async (req, res) => {
     // Attach the user to req.user
     req.user = {
       userId: user.id,
+      email: user.email,
       role: user.role,
     };
 
@@ -144,6 +145,7 @@ export const login: RequestHandler = async (req, res) => {
     // Attach user to req.user
     req.user = {
       userId: user.id,
+      email: user.email,
       role: user.role,
     };
 
@@ -186,7 +188,7 @@ export const refresh: RequestHandler = async (req, res) => {
     // Rotate: revoke old, issue new pair
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, role: true },
+      select: { id: true, email: true, role: true },
     });
     if (!user) {
       res.status(401).json({ message: "User not found" });
@@ -198,6 +200,7 @@ export const refresh: RequestHandler = async (req, res) => {
     // Attach user to req.user
     req.user = {
       userId: user.id,
+      email: user.email,
       role: user.role,
     };
 

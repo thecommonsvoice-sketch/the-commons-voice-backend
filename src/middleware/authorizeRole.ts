@@ -43,7 +43,7 @@ export const authorizeRole = (allowedRoles: Array<Role | string>) => {
       next();
     } catch (error) {
       console.error("Authorization error:", error);
-      next(error as any);
+      next(error);
     }
   };
 };

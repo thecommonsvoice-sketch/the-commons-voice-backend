@@ -75,8 +75,8 @@ export const getAllUsers = async (req: Request, res: Response): Promise<void> =>
     const where = search
       ? {
           OR: [
-            { name: { contains: search as string, mode: "insensitive" as any } },
-            { email: { contains: search as string, mode: "insensitive" as any } },
+            { name: { contains: search as string, mode: "insensitive" as const } },
+            { email: { contains: search as string, mode: "insensitive" as const } },
           ],
         }
       : {};
