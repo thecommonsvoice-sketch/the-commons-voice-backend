@@ -9,11 +9,13 @@ import {
   getCookieOptions,
 } from "../config/authCookies.js";
 import {
+  Role,
+  BasePayload,
+  RefreshPayload,
   signAccessToken,
   signRefreshToken,
   verifyToken,
-  genJti,
-  Role,
+  genJti
 } from "../utils/tokens.js";
 
 const registerSchema = z.object({
@@ -31,6 +33,7 @@ async function issueTokensAndCookies(
   res: Response,
   userId: string,
   role: Role,
+  email: string,
   oldJti?: string
 ) {
   if (oldJti) {
@@ -41,8 +44,10 @@ async function issueTokensAndCookies(
   }
 
   const jti = genJti();
-  const access = signAccessToken({ userId, role });
-  const refresh = signRefreshToken({ userId, tokenType: "refresh", jti });
+  const basePayload: BasePayload = { userId, role, email };
+  
+  const access = signAccessToken(basePayload);
+  const refresh = signRefreshToken({ ...basePayload, jti });
 
   await prisma.refreshToken.create({
     data: {
@@ -88,13 +93,12 @@ export const register: RequestHandler = async (req, res) => {
     });
 
     // Issue tokens and set cookies
-    await issueTokensAndCookies(res, user.id, user.role as Role);
+    await issueTokensAndCookies(res, user.id, user.role as Role, user.email);
 
     // Attach the user to req.user
     req.user = {
       userId: user.id,
-      email: user.email,
-      role: user.role,
+      role: user.role
     };
 
     // Respond with the created user (excluding sensitive data)
@@ -140,13 +144,12 @@ export const login: RequestHandler = async (req, res) => {
     }
 
     // Issue tokens & cookies immediately
-    await issueTokensAndCookies(res, user.id, user.role as Role);
+    await issueTokensAndCookies(res, user.id, user.role as Role, user.email);
 
     // Attach user to req.user
     req.user = {
       userId: user.id,
-      email: user.email,
-      role: user.role,
+      role: user.role
     };
 
 
@@ -172,8 +175,8 @@ export const refresh: RequestHandler = async (req, res) => {
   }
 
   try {
-    const payload = verifyToken<{ userId: string; tokenType: "refresh"; jti: string }>(refreshToken);
-    if (payload.tokenType !== "refresh") {
+    const payload = verifyToken<RefreshPayload>(refreshToken);
+    if (payload.type !== "refresh") {
       res.status(401).json({ message: "Invalid refresh token" });
       return;
     }
@@ -195,13 +198,12 @@ export const refresh: RequestHandler = async (req, res) => {
       return;
     }
 
-    await issueTokensAndCookies(res, user.id, user.role as Role, payload.jti);
+    await issueTokensAndCookies(res, user.id, user.role as Role, user.email, payload.jti);
 
     // Attach user to req.user
     req.user = {
       userId: user.id,
-      email: user.email,
-      role: user.role,
+      role: user.role
     };
 
     res.json({ message: "Refreshed" });

@@ -16,12 +16,20 @@ declare module "express-serve-static-core" {
   }
 }
 
+declare global {
+  namespace Express {
+    interface User {
+      userId: string;
+      role: string;
+    }
+  }
+}
+
 export const authenticate = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-
   const token = req.cookies?.[ACCESS_TOKEN_COOKIE];
 
   if (!token) {
