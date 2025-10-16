@@ -8,7 +8,7 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "npm run clean && dotenv -c -- tsc",
+    "build": "npm run clean && npm exec -- dotenv -c -- tsc",
     "start": "node dist/server.js",
     "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts"
   },

@@ -4,7 +4,7 @@ import cors from "cors";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import compression from "compression";
-import rateLimit from "express-rate-limit";
+// import rateLimit from "express-rate-limit";
 import authRoutes from "./routes/auth.routes.js";
 import articleRoutes from "./routes/article.routes.js";
 import categoryRoutes from "./routes/category.routes.js";
