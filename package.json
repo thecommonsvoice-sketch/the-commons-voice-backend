@@ -6,12 +6,12 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "scripts": {
-    "clean": "rm -rf dist",
-    "build": "npm run clean && npm exec -- dotenv -c -- tsc",
-    "start": "node dist/server.js",
-    "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts"
-  },
+"scripts": {
+  "clean": "rm -rf dist",
+  "build": "npm run clean && node prebuild.js",
+  "start": "node dist/server.js",
+  "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts"
+},
   "prisma": {
     "seed": "node --loader ts-node/esm prisma/seed.ts"
   },
