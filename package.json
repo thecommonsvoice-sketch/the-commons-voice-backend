@@ -6,12 +6,13 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "scripts": {
-    "clean": "rm -rf dist",
-    "build": "npm run clean && tsc",
-    "start": "node dist/server.js",
-    "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts"
-  },
+"scripts": {
+  "clean": "rm -rf dist",
+  "build:compile": "tsc",
+  "build": "npm run clean && npm run build:compile",
+  "start": "node dist/server.js",
+  "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts"
+},
   "prisma": {
     "seed": "node --loader ts-node/esm prisma/seed.ts"
   },
@@ -44,6 +45,7 @@
     "@types/morgan": "^1.9.10",
     "@types/node": "^20.14.0",
     "concurrently": "^9.0.1",
+    "dotenv-cli": "10.0.0",
     "nodemon": "^3.1.7",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.5",
